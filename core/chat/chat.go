@@ -14,7 +14,7 @@ func Setup(listener models.ChatListener) {
 	clients := make(map[string]*Client)
 	addCh := make(chan *Client)
 	delCh := make(chan *Client)
-	sendAllCh := make(chan models.ChatMessage)
+	sendAllCh := make(chan models.ChatEvent)
 	pingCh := make(chan models.PingMessage)
 	doneCh := make(chan bool)
 	errCh := make(chan error)
@@ -51,7 +51,7 @@ func Start() error {
 }
 
 // SendMessage sends a message to all.
-func SendMessage(message models.ChatMessage) {
+func SendMessage(message models.ChatEvent) {
 	if _server == nil {
 		return
 	}
@@ -60,12 +60,16 @@ func SendMessage(message models.ChatMessage) {
 }
 
 // GetMessages gets all of the messages.
-func GetMessages() []models.ChatMessage {
+func GetMessages() []models.ChatEvent {
 	if _server == nil {
-		return []models.ChatMessage{}
+		return []models.ChatEvent{}
 	}
 
 	return getChatHistory()
+}
+
+func GetModerationChatMessages() []models.ChatEvent {
+	return getChatModerationHistory()
 }
 
 func GetClient(clientID string) *Client {

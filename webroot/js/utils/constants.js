@@ -24,6 +24,7 @@ export const PLAYER_VOLUME = 'owncast_volume';
 
 
 export const KEY_USERNAME = 'owncast_username';
+export const KEY_CUSTOM_USERNAME_SET = 'owncast_custom_username_set'
 export const KEY_CHAT_DISPLAYED = 'owncast_chat';
 export const KEY_CHAT_FIRST_MESSAGE_SENT = 'owncast_first_message_sent';
 export const CHAT_INITIAL_PLACEHOLDER_TEXT = 'Type here to chat, no account necessary.';
@@ -48,7 +49,7 @@ export const CHAT_KEY_MODIFIERS = [
   'Meta',
   'Alt',
 ];
-export const MESSAGE_JUMPTOBOTTOM_BUFFER = 260;
+export const MESSAGE_JUMPTOBOTTOM_BUFFER = 300;
 
 // app styling
 export const WIDTH_SINGLE_COL = 730;

@@ -11,14 +11,27 @@ ARCH=(amd64 amd64 386 arm-7)
 VERSION=$1
 SHOULD_RELEASE=$2
 
+# Build info
+GIT_COMMIT=$(git rev-list -1 HEAD)
+GIT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+
 if [[ -z "${VERSION}" ]]; then
   echo "Version must be specified when running build"
   exit
 fi
 
+BUILD_TEMP_DIRECTORY="$(mktemp -d)"
+cd $BUILD_TEMP_DIRECTORY
+
+echo "Cloning owncast into $BUILD_TEMP_DIRECTORY..."
+git clone https://github.com/owncast/owncast 2> /dev/null
+cd owncast
+
+echo "Changing to branch: $GIT_BRANCH"
+git checkout $GIT_BRANCH
+
 [[ -z "${VERSION}" ]] && VERSION='unknownver' || VERSION="${VERSION}"
-GIT_COMMIT=$(git rev-list -1 HEAD)
-GIT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+
 # Change to the root directory of the repository
 cd $(git rev-parse --show-toplevel)
 
@@ -45,15 +58,10 @@ build() {
   VERSION=$4
   GIT_COMMIT=$5
 
-  echo "Building ${NAME} (${OS}/${ARCH}) release from ${GIT_BRANCH}..."
+  echo "Building ${NAME} (${OS}/${ARCH}) release from ${GIT_BRANCH} ${GIT_COMMIT}..."
 
   mkdir -p dist/${NAME}
-  mkdir -p dist/${NAME}/webroot/static
   mkdir -p dist/${NAME}/data
-
-  # Default files
-  cp config-default.yaml dist/${NAME}/config.yaml
-  cp data/content-example.md dist/${NAME}/data/content.md
 
   cp -R webroot/ dist/${NAME}/webroot/
 
@@ -61,10 +69,11 @@ build() {
   cp "${TMPDIR}tailwind.min.css" ./dist/${NAME}/webroot/js/web_modules/tailwindcss/dist/tailwind.min.css
   cp -R static/ dist/${NAME}/static
   cp README.md dist/${NAME}
+  cp webroot/img/logo.svg dist/${NAME}/data/logo.svg
 
   pushd dist/${NAME} >> /dev/null
 
-  CGO_ENABLED=1 ~/go/bin/xgo --branch ${GIT_BRANCH} -ldflags "-s -w -X main.GitCommit=${GIT_COMMIT} -X main.BuildVersion=${VERSION} -X main.BuildType=${NAME}" -targets "${OS}/${ARCH}" github.com/owncast/owncast
+  CGO_ENABLED=1 ~/go/bin/xgo --branch ${GIT_BRANCH} -ldflags "-s -w -X main.GitCommit=${GIT_COMMIT} -X main.BuildVersion=${VERSION} -X main.BuildPlatform=${NAME}" -targets "${OS}/${ARCH}" github.com/owncast/owncast
   mv owncast-*-${ARCH} owncast
 
   zip -r -q -8 ../owncast-$VERSION-$NAME.zip .
@@ -77,9 +86,12 @@ for i in "${!DISTRO[@]}"; do
   build ${DISTRO[$i]} ${OS[$i]} ${ARCH[$i]} $VERSION $GIT_COMMIT
 done
 
+echo "Build archives are available in $BUILD_TEMP_DIRECTORY/owncast/dist"
+ls -alh "$BUILD_TEMP_DIRECTORY/owncast/dist"
+
 # Use the second argument "release" to create an actual release.
 if [ "$SHOULD_RELEASE" != "release" ]; then
-  echo "Not creating a release."
+  echo "Not uploading a release."
   exit
 fi
 

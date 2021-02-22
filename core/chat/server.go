@@ -3,18 +3,22 @@ package chat
 import (
 	"fmt"
 	"net/http"
+	"sync"
 	"time"
 
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/net/websocket"
 
-	"github.com/owncast/owncast/config"
+	"github.com/owncast/owncast/core/data"
+	"github.com/owncast/owncast/core/webhooks"
 	"github.com/owncast/owncast/models"
 )
 
 var (
 	_server *server
 )
+
+var l = sync.Mutex{}
 
 // Server represents the server which handles the chat.
 type server struct {
@@ -25,7 +29,7 @@ type server struct {
 
 	addCh     chan *Client
 	delCh     chan *Client
-	sendAllCh chan models.ChatMessage
+	sendAllCh chan models.ChatEvent
 	pingCh    chan models.PingMessage
 	doneCh    chan bool
 	errCh     chan error
@@ -42,7 +46,7 @@ func (s *server) remove(c *Client) {
 }
 
 // SendToAll sends a message to all of the connected clients.
-func (s *server) SendToAll(msg models.ChatMessage) {
+func (s *server) SendToAll(msg models.ChatEvent) {
 	s.sendAllCh <- msg
 }
 
@@ -51,14 +55,14 @@ func (s *server) err(err error) {
 	s.errCh <- err
 }
 
-func (s *server) sendAll(msg models.ChatMessage) {
+func (s *server) sendAll(msg models.ChatEvent) {
 	for _, c := range s.Clients {
-		c.Write(msg)
+		c.write(msg)
 	}
 }
 
 func (s *server) ping() {
-	ping := models.PingMessage{MessageType: PING}
+	ping := models.PingMessage{MessageType: models.PING}
 	for _, c := range s.Clients {
 		c.pingch <- ping
 	}
@@ -68,13 +72,24 @@ func (s *server) usernameChanged(msg models.NameChangeEvent) {
 	for _, c := range s.Clients {
 		c.usernameChangeChannel <- msg
 	}
+
+	go webhooks.SendChatEventUsernameChanged(msg)
+}
+
+func (s *server) userJoined(msg models.UserJoinedEvent) {
+	if s.listener.IsStreamConnected() {
+		for _, c := range s.Clients {
+			c.userJoinedChannel <- msg
+		}
+	}
+	go webhooks.SendChatEventUserJoined(msg)
 }
 
 func (s *server) onConnection(ws *websocket.Conn) {
 	client := NewClient(ws)
 
 	defer func() {
-		log.Tracef("The client was connected for %s and sent %d messages (%s)", time.Since(client.ConnectedAt), client.MessageCount, client.ClientID)
+		s.removeClient(client)
 
 		if err := ws.Close(); err != nil {
 			s.errCh <- err
@@ -82,7 +97,7 @@ func (s *server) onConnection(ws *websocket.Conn) {
 	}()
 
 	s.add(client)
-	client.Listen()
+	client.listen()
 }
 
 // Listen and serve.
@@ -96,32 +111,42 @@ func (s *server) Listen() {
 		select {
 		// add new a client
 		case c := <-s.addCh:
+			l.Lock()
 			s.Clients[c.socketID] = c
-			s.listener.ClientAdded(c.GetViewerClientFromChatClient())
-			s.sendWelcomeMessageToClient(c)
+			l.Unlock()
+
+			if !c.Ignore {
+				s.listener.ClientAdded(c.GetViewerClientFromChatClient())
+				s.sendWelcomeMessageToClient(c)
+			}
 
 		// remove a client
 		case c := <-s.delCh:
-			delete(s.Clients, c.socketID)
-			s.listener.ClientRemoved(c.socketID)
-
+			s.removeClient(c)
+		case msg := <-s.sendAllCh:
 			// message was received from a client and should be sanitized, validated
 			// and distributed to other clients.
-		case msg := <-s.sendAllCh:
+			//
 			// Will turn markdown into html, sanitize user-supplied raw html
 			// and standardize this message into something safe we can send everyone else.
 			msg.RenderAndSanitizeMessageBody()
 
-			s.listener.MessageSent(msg)
-			s.sendAll(msg)
+			if !msg.Empty() {
+				s.listener.MessageSent(msg)
+				s.sendAll(msg)
 
-			// Store in the message history
-			addMessage(msg)
+				// Store in the message history
+				msg.SetDefaults()
+				addMessage(msg)
+
+				// Send webhooks
+				go webhooks.SendChatEvent(msg)
+			}
 		case ping := <-s.pingCh:
 			fmt.Println("PING?", ping)
 
 		case err := <-s.errCh:
-			log.Error("Error:", err.Error())
+			log.Trace("Error: ", err.Error())
 
 		case <-s.doneCh:
 			return
@@ -129,13 +154,26 @@ func (s *server) Listen() {
 	}
 }
 
+func (s *server) removeClient(c *Client) {
+	l.Lock()
+
+	if _, ok := s.Clients[c.socketID]; ok {
+		delete(s.Clients, c.socketID)
+
+		s.listener.ClientRemoved(c.socketID)
+
+		log.Tracef("The client was connected for %s and sent %d messages (%s)", time.Since(c.ConnectedAt), c.MessageCount, c.ClientID)
+	}
+	l.Unlock()
+}
+
 func (s *server) sendWelcomeMessageToClient(c *Client) {
 	go func() {
 		// Add an artificial delay so people notice this message come in.
 		time.Sleep(7 * time.Second)
 
-		initialChatMessageText := fmt.Sprintf("Welcome to %s! %s", config.Config.InstanceDetails.Title, config.Config.InstanceDetails.Summary)
-		initialMessage := models.ChatMessage{ClientID: "owncast-server", Author: config.Config.InstanceDetails.Name, Body: initialChatMessageText, ID: "initial-message-1", MessageType: "SYSTEM", Visible: true, Timestamp: time.Now()}
-		c.Write(initialMessage)
+		initialChatMessageText := fmt.Sprintf("Welcome to %s! %s", data.GetServerName(), data.GetServerSummary())
+		initialMessage := models.ChatEvent{ClientID: "owncast-server", Author: data.GetServerName(), Body: initialChatMessageText, ID: "initial-message-1", MessageType: "SYSTEM", Visible: true, Timestamp: time.Now()}
+		c.write(initialMessage)
 	}()
 }

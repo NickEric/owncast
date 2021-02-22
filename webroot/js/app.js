@@ -3,7 +3,7 @@ import htm from '/js/web_modules/htm.js';
 const html = htm.bind(h);
 
 import { OwncastPlayer } from './components/player.js';
-import SocialIconsList from './components/social-icons-list.js';
+import SocialIconsList from './components/platform-logos-list.js';
 import UsernameForm from './components/chat/username.js';
 import VideoPoster from './components/video-poster.js';
 import Chat from './components/chat/chat.js';
@@ -44,6 +44,7 @@ export default class App extends Component {
 
     const chatStorage = getLocalStorage(KEY_CHAT_DISPLAYED);
     this.hasTouchScreen = hasTouchScreen();
+    this.windowBlurred = false;
 
     this.state = {
       websocket: new Websocket(),
@@ -81,12 +82,16 @@ export default class App extends Component {
     this.handleUsernameChange = this.handleUsernameChange.bind(this);
     this.handleFormFocus = this.handleFormFocus.bind(this);
     this.handleFormBlur = this.handleFormBlur.bind(this);
+    this.handleWindowBlur = this.handleWindowBlur.bind(this);
+    this.handleWindowFocus = this.handleWindowFocus.bind(this);
     this.handleWindowResize = debounce(this.handleWindowResize.bind(this), 250);
 
     this.handleOfflineMode = this.handleOfflineMode.bind(this);
     this.handleOnlineMode = this.handleOnlineMode.bind(this);
     this.disableChatInput = this.disableChatInput.bind(this);
     this.setCurrentStreamDuration = this.setCurrentStreamDuration.bind(this);
+
+    this.handleKeyPressed = this.handleKeyPressed.bind(this);
 
     // player events
     this.handlePlayerReady = this.handlePlayerReady.bind(this);
@@ -101,10 +106,15 @@ export default class App extends Component {
 
   componentDidMount() {
     this.getConfig();
-    window.addEventListener('resize', this.handleWindowResize);
+    if (!this.hasTouchScreen) {
+      window.addEventListener('resize', this.handleWindowResize);
+    }
+    window.addEventListener('blur', this.handleWindowBlur);
+    window.addEventListener('focus', this.handleWindowFocus);
     if (this.hasTouchScreen) {
       window.addEventListener('orientationchange', this.handleWindowResize);
     }
+    window.addEventListener('keypress', this.handleKeyPressed);
     this.player = new OwncastPlayer();
     this.player.setupPlayerCallbacks({
       onReady: this.handlePlayerReady,
@@ -123,6 +133,9 @@ export default class App extends Component {
     clearTimeout(this.disableChatTimer);
     clearInterval(this.streamDurationTimer);
     window.removeEventListener('resize', this.handleWindowResize);
+    window.removeEventListener('blur', this.handleWindowBlur);
+    window.removeEventListener('focus', this.handleWindowFocus);
+    window.removeEventListener('keypress', this.handleKeyPressed);
     if (this.hasTouchScreen) {
       window.removeEventListener('orientationchange', this.handleWindowResize);
     }
@@ -164,8 +177,8 @@ export default class App extends Component {
   }
 
   setConfigData(data = {}) {
-    const { title, summary } = data;
-    window.document.title = title;
+    const { name, summary } = data;
+    window.document.title = name;
 
     this.setState({
       configData: {
@@ -186,6 +199,7 @@ export default class App extends Component {
       viewerCount,
       online,
       lastConnectTime,
+      streamTitle,
     } = status;
 
     this.lastDisconnectTime = status.lastDisconnectTime;
@@ -202,6 +216,7 @@ export default class App extends Component {
       viewerCount,
       lastConnectTime,
       streamOnline: online,
+      streamTitle,
     });
   }
 
@@ -248,6 +263,10 @@ export default class App extends Component {
     if (this.player.vjsPlayer && this.player.vjsPlayer.paused()) {
       this.handlePlayerEnded();
     }
+
+    if (this.windowBlurred) {
+      document.title = ` 🔴 ${this.state.configData && this.state.configData.name}`;
+    }
   }
 
   // play video!
@@ -265,8 +284,13 @@ export default class App extends Component {
       playerActive: true,
       streamOnline: true,
       chatInputEnabled: true,
+      streamTitle: '',
       streamStatusMessage: MESSAGE_ONLINE,
     });
+
+    if (this.windowBlurred) {
+      document.title = ` 🟢 ${this.state.configData && this.state.configData.name}`;
+    }
   }
 
   setCurrentStreamDuration() {
@@ -335,6 +359,36 @@ export default class App extends Component {
     });
   }
 
+  handleWindowBlur() {
+    this.windowBlurred = true;
+  }
+
+  handleWindowFocus() {
+    this.windowBlurred = false;
+    window.document.title = this.state.configData && this.state.configData.name;
+  }
+
+  handleSpaceBarPressed(e) {
+    e.preventDefault();
+    if(this.state.isPlaying) {
+      this.setState({
+        isPlaying: false,
+      });
+      this.player.vjsPlayer.pause();
+    } else {
+      this.setState({
+        isPlaying: true,
+      });
+      this.player.vjsPlayer.play();
+    }
+  }
+
+  handleKeyPressed(e) {
+    if (e.code === 'Space' && e.target === document.body && this.state.streamOnline) {
+      this.handleSpaceBarPressed(e);
+    }
+  }
+
   render(props, state) {
     const {
       chatInputEnabled,
@@ -345,6 +399,7 @@ export default class App extends Component {
       playerActive,
       streamOnline,
       streamStatusMessage,
+      streamTitle,
       touchKeyboardActive,
       username,
       viewerCount,
@@ -358,10 +413,9 @@ export default class App extends Component {
       version: appVersion,
       logo = TEMP_IMAGE,
       socialHandles = [],
-      name: streamerName,
       summary,
       tags = [],
-      title,
+      name,
       extraPageContent,
     } = configData;
 
@@ -372,7 +426,7 @@ export default class App extends Component {
           (tag, index) => html`
             <li
               key="tag${index}"
-              class="tag rounded-sm text-gray-100 bg-gray-700 text-xs uppercase mr-3 p-2 whitespace-no-wrap"
+              class="tag rounded-sm text-gray-100 bg-gray-700 text-xs uppercase mr-3 mb-2 p-2 whitespace-no-wrap"
             >
               ${tag}
             </li>
@@ -380,8 +434,11 @@ export default class App extends Component {
         )
       : null;
 
+    const viewerCountMessage = streamOnline && viewerCount > 0 ? (
+      html`${viewerCount} ${pluralize('viewer', viewerCount)}`
+    ) : null;
+
     const mainClass = playerActive ? 'online' : '';
-    const streamInfoClass = streamOnline ? 'online' : ''; // need?
     const isPortrait = this.hasTouchScreen && orientation === ORIENTATION_PORTRAIT;
     const shortHeight = windowHeight <= HEIGHT_SHORT_WIDE && !isPortrait;
     const singleColMode = windowWidth <= WIDTH_SINGLE_COL && !shortHeight;
@@ -419,7 +476,7 @@ export default class App extends Component {
                 <img class="logo visually-hidden" src=${OWNCAST_LOGO_LOCAL} alt="owncast logo" />
               </span>
               <span class="instance-title overflow-hidden truncate"
-                >${title}</span
+                >${(streamOnline && streamTitle) ? streamTitle : name}</span
               >
             </h1>
             <div
@@ -462,10 +519,10 @@ export default class App extends Component {
           <section
             id="stream-info"
             aria-label="Stream status"
-            class="flex text-center flex-row justify-between font-mono py-2 px-8 bg-gray-900 text-indigo-200 shadow-md border-b border-gray-100 border-solid ${streamInfoClass}"
+            class="flex text-center flex-row justify-between font-mono py-2 px-8 bg-gray-900 text-indigo-200 shadow-md border-b border-gray-100 border-solid"
           >
             <span>${streamStatusMessage}</span>
-            <span>${viewerCount} ${pluralize('viewer', viewerCount)}.</span>
+            <span id="stream-viewer-count">${viewerCountMessage}</span>
           </section>
         </main>
 
@@ -482,16 +539,19 @@ export default class App extends Component {
             >
               <h2 class="font-semibold text-5xl">
                 <span class="streamer-name text-indigo-600"
-                  >${streamerName}</span
+                  >${name}</span
                 >
               </h2>
+              <h3 class="font-semibold text-3xl">
+                ${streamOnline && streamTitle}
+              </h3>
               <${SocialIconsList} handles=${socialHandles} />
               <div
                 id="stream-summary"
                 class="stream-summary my-4"
                 dangerouslySetInnerHTML=${{ __html: summary }}
               ></div>
-              <ul id="tag-list" class="tag-list flex flex-row my-4">
+              <ul id="tag-list" class="tag-list flex flex-row flex-wrap my-4">
                 ${tagList}
               </ul>
             </div>
@@ -514,6 +574,7 @@ export default class App extends Component {
           websocket=${websocket}
           username=${username}
           chatInputEnabled=${chatInputEnabled}
+          instanceTitle=${name}
         />
       </div>
     `;

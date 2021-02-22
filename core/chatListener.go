@@ -1,8 +1,6 @@
 package core
 
 import (
-	"errors"
-
 	"github.com/owncast/owncast/core/chat"
 	"github.com/owncast/owncast/models"
 )
@@ -21,21 +19,26 @@ func (cl ChatListenerImpl) ClientRemoved(clientID string) {
 }
 
 // MessageSent is for when a message is sent.
-func (cl ChatListenerImpl) MessageSent(message models.ChatMessage) {
+func (cl ChatListenerImpl) MessageSent(message models.ChatEvent) {
+}
+
+// IsStreamConnected will return if the stream is connected.
+func (cl ChatListenerImpl) IsStreamConnected() bool {
+	return IsStreamConnected()
 }
 
 // SendMessageToChat sends a message to the chat server.
-func SendMessageToChat(message models.ChatMessage) error {
-	if !message.Valid() {
-		return errors.New("invalid chat message; id, author, and body are required")
-	}
-
+func SendMessageToChat(message models.ChatEvent) error {
 	chat.SendMessage(message)
 
 	return nil
 }
 
 // GetAllChatMessages gets all of the chat messages.
-func GetAllChatMessages() []models.ChatMessage {
+func GetAllChatMessages() []models.ChatEvent {
 	return chat.GetMessages()
+}
+
+func GetModerationChatMessages() []models.ChatEvent {
+	return chat.GetModerationChatMessages()
 }

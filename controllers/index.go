@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
 	"path"
 	"path/filepath"
 	"strings"
@@ -13,16 +14,22 @@ import (
 
 	"github.com/owncast/owncast/config"
 	"github.com/owncast/owncast/core"
+	"github.com/owncast/owncast/core/data"
+	"github.com/owncast/owncast/models"
 	"github.com/owncast/owncast/router/middleware"
 	"github.com/owncast/owncast/utils"
 )
 
+// MetadataPage represents a server-rendered web page for bots and web scrapers.
 type MetadataPage struct {
-	Config       config.InstanceDetails
-	RequestedURL string
-	Image        string
-	Thumbnail    string
-	TagsString   string
+	RequestedURL  string
+	Image         string
+	Thumbnail     string
+	TagsString    string
+	Summary       string
+	Name          string
+	Tags          []string
+	SocialHandles []models.SocialHandle
 }
 
 // IndexHandler handles the default index route.
@@ -40,6 +47,13 @@ func IndexHandler(w http.ResponseWriter, r *http.Request) {
 	// If the ETags match then return a StatusNotModified
 	if responseCode := middleware.ProcessEtags(w, r); responseCode != 0 {
 		w.WriteHeader(responseCode)
+		return
+	}
+
+	// If this is a directory listing request then return a 404
+	info, err := os.Stat(path.Join(config.WebRoot, r.URL.Path))
+	if err != nil || (info.IsDir() && !isIndexRequest) {
+		w.WriteHeader(http.StatusNotFound)
 		return
 	}
 
@@ -62,7 +76,7 @@ func handleScraperMetadataPage(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Panicln(err)
 	}
-	imageURL, err := url.Parse(fmt.Sprintf("http://%s%s", r.Host, config.Config.InstanceDetails.Logo))
+	imageURL, err := url.Parse(fmt.Sprintf("http://%s%s", r.Host, "/logo"))
 	if err != nil {
 		log.Panicln(err)
 	}
@@ -83,8 +97,16 @@ func handleScraperMetadataPage(w http.ResponseWriter, r *http.Request) {
 		thumbnailURL = imageURL.String()
 	}
 
-	tagsString := strings.Join(config.Config.InstanceDetails.Tags, ",")
-	metadata := MetadataPage{config.Config.InstanceDetails, fullURL.String(), imageURL.String(), thumbnailURL, tagsString}
+	tagsString := strings.Join(data.GetServerMetadataTags(), ",")
+	metadata := MetadataPage{
+		Name:          data.GetServerName(),
+		RequestedURL:  fullURL.String(),
+		Image:         imageURL.String(),
+		Thumbnail:     thumbnailURL,
+		TagsString:    tagsString,
+		Tags:          data.GetServerMetadataTags(),
+		SocialHandles: data.GetSocialHandles(),
+	}
 
 	w.Header().Set("Content-Type", "text/html")
 	err = tmpl.Execute(w, metadata)
