@@ -22,7 +22,7 @@ export default class ChatMessageView extends Component {
     const { formattedMessage } = this.state;
     const { formattedMessage: nextFormattedMessage } = nextState;
 
-    return (formattedMessage !== nextFormattedMessage);
+    return formattedMessage !== nextFormattedMessage;
   }
 
   async componentDidMount() {
@@ -35,7 +35,6 @@ export default class ChatMessageView extends Component {
       });
     }
   }
-
 
   render() {
     const { message } = this.props;
@@ -66,10 +65,7 @@ export default class ChatMessageView extends Component {
         title=${formattedTimestamp}
       >
         <div class="message-content break-words w-full">
-          <div
-            style=${authorTextColor}
-            class="message-author font-bold"
-          >
+          <div style=${authorTextColor} class="message-author font-bold">
             ${author}
           </div>
           <div
@@ -100,18 +96,18 @@ function highlightUsername(message, username) {
   // https://github.com/julmot/mark.js/issues/115
   const node = document.createElement('span');
   node.innerHTML = message;
-  return new Promise(res => {
+  return new Promise((res) => {
     new Mark(node).mark(username, {
       element: 'span',
       className: 'highlighted px-1 rounded font-bold bg-orange-500',
       separateWordSearch: false,
       accuracy: {
         value: 'exactly',
-        limiters: [",", ".", "'", '?', '@'],
+        limiters: [',', '.', "'", '?', '@'],
       },
       done() {
         res(node.innerHTML);
-      }
+      },
     });
   });
 }
@@ -217,5 +213,3 @@ function convertToMarkup(str = '') {
 function stripTags(str) {
   return str.replace(/<\/?[^>]+(>|$)/g, '');
 }
-
-

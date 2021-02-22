@@ -11,7 +11,7 @@ export const SOCKET_MESSAGE_TYPES = {
   PONG: 'PONG',
   SYSTEM: 'SYSTEM',
   USER_JOINED: 'USER_JOINED',
-  CHAT_ACTION: 'CHAT_ACTION'
+  CHAT_ACTION: 'CHAT_ACTION',
 };
 
 const IGNORE_CLIENT_FLAG = 'IGNORE_CLIENT';
@@ -20,7 +20,7 @@ export const CALLBACKS = {
   RAW_WEBSOCKET_MESSAGE_RECEIVED: 'rawWebsocketMessageReceived',
   WEBSOCKET_CONNECTED: 'websocketConnected',
   WEBSOCKET_DISCONNECTED: 'websocketDisconnected',
-}
+};
 
 const TIMER_WEBSOCKET_RECONNECT = 5000; // ms
 
@@ -162,6 +162,8 @@ export default class Websocket {
   }
 
   handleNetworkingError(error) {
-    console.error(`Websocket Error. Chat is likely not working. Visit troubleshooting steps to resolve. https://owncast.online/docs/troubleshooting/#chat-is-disabled: ${error}`);
+    console.error(
+      `Websocket Error. Chat is likely not working. Visit troubleshooting steps to resolve. https://owncast.online/docs/troubleshooting/#chat-is-disabled: ${error}`
+    );
   }
 }

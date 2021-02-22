@@ -56,7 +56,7 @@ class OwncastPlayer {
   }
 
   init() {
-    videojs.Vhs.xhr.beforeRequest = options => {
+    videojs.Vhs.xhr.beforeRequest = (options) => {
       if (options.uri.match('m3u8')) {
         const cachebuster = Math.round(new Date().getTime() / 1000);
         options.uri = `${options.uri}?cachebust=${cachebuster}`;
@@ -103,7 +103,10 @@ class OwncastPlayer {
   }
 
   handleVolume() {
-    setLocalStorage(PLAYER_VOLUME, this.vjsPlayer.muted() ? 0 : this.vjsPlayer.volume());
+    setLocalStorage(
+      PLAYER_VOLUME,
+      this.vjsPlayer.muted() ? 0 : this.vjsPlayer.volume()
+    );
   }
 
   handlePlaying() {

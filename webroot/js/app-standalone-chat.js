@@ -29,15 +29,13 @@ export default class StandaloneChat extends Component {
 
   render(props, state) {
     const { username, websocket } = state;
-    return (
-      html`
-        <${Chat}
-          websocket=${websocket}
-          username=${username}
-          messagesOnly
-          ignoreClient
-        />
-      `
-    );
+    return html`
+      <${Chat}
+        websocket=${websocket}
+        username=${username}
+        messagesOnly
+        ignoreClient
+      />
+    `;
   }
 }
